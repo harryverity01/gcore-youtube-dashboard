@@ -1,0 +1,10 @@
+# Generated each run by the Action (and locally) — never committed
+docs/data.json
+docs/index.html
+
+# Local tooling / secrets — never commit a token
+.claude/
+*.token.json
+token.json
+__pycache__/
+.DS_Store

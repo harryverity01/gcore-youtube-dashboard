@@ -1,0 +1,24 @@
+{
+  "phase": "Phase 2 — Editorial Scaling",
+  "phase_window": "Q2 2026 – Q4 2026",
+  "mission": "Grow Gcore's channel into the default AI-news destination for enterprise decision-makers — by pairing universal AI questions with data-backed contrarian takes and natural Gcore infrastructure angles.",
+  "formula": "Universal question + contrarian take + infrastructure angle + natural Gcore integration",
+  "targets": [
+    { "key": "subscribers", "label": "Subscribers", "goal": 5000, "live": true, "note": "Phase 2 goal" },
+    { "key": "top_video_views", "label": "First editorial video over 10K views", "goal": 10000, "live": true, "note": "Best is currently the OpenAI-vs-Anthropic hit" },
+    { "key": "monthly_5k", "label": "One consistent 5K+ performer / month", "goal": 5000, "live": true, "note": "Top video in the 28-day window vs 5K bar" }
+  ],
+  "insights": [
+    "Editorial long-form is the entire growth engine — ~92% of views, ~97% of watch time. Shorts are negligible here; don't chase them.",
+    "Contrarian curiosity beats announcement framing by 10–40×. 'Mac Minis for OpenClaw' (3,652) vs the Dynamo product launch (83) — same channel, same month.",
+    "8–12 minutes is the sweet spot. 16+ minute videos consistently underperform relative to content quality.",
+    "Topic franchises compound. The OpenClaw / GClaw series has 5 videos and 5,600+ combined views.",
+    "The audience is enterprise men skewing older (25–54), Western-geography (US #1, then Germany, UK). They click on evidence, not alarm.",
+    "The first 30 seconds decide everything — every video ships hook-first or not at all."
+  ],
+  "next_up": [
+    "Plan the next OpenClaw / GClaw franchise video — identify the next question",
+    "Revise + ship the Mythos / Project Glasswing editorial script",
+    "Run a length audit on the backlog — flag anything over 12 min for a recut"
+  ]
+}
