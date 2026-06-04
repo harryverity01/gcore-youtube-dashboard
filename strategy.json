@@ -1,6 +1,8 @@
 {
   "phase": "Phase 2 — Editorial Scaling",
   "phase_window": "Q2 2026 – Q4 2026",
+  "editorial_since": "2025-09-01",
+  "_editorial_since_note": "Top Videos wall + 'top video' targets only count videos published on/after this date — excludes old Gcore brand/promo videos. Move this date to change the cutoff.",
   "mission": "Grow Gcore's channel into the default AI-news destination for enterprise decision-makers — by pairing universal AI questions with data-backed contrarian takes and natural Gcore infrastructure angles.",
   "formula": "Universal question + contrarian take + infrastructure angle + natural Gcore integration",
   "targets": [

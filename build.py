@@ -119,16 +119,16 @@ HTML = r"""<!DOCTYPE html>
   <h2 class="sec">Phase 2 — Progress to Targets</h2>
   <div id="targets"></div>
 
-  <h2 class="sec">Audience &amp; Reach · Last 28 Days</h2>
+  <h2 class="sec">Audience &amp; Reach · Last 60 Days</h2>
   <div class="grid">
-    <div class="chart full"><h3>Daily views (28-day window)</h3><div class="cv"><canvas id="cTrend"></canvas></div></div>
+    <div class="chart full"><h3>Daily views (60-day window)</h3><div class="cv"><canvas id="cTrend"></canvas></div></div>
     <div class="chart"><h3>Traffic sources</h3><div class="cv"><canvas id="cTraffic"></canvas></div></div>
     <div class="chart"><h3>Top geographies (views)</h3><div class="cv"><canvas id="cGeo"></canvas></div></div>
     <div class="chart"><h3>Audience by age</h3><div class="cv"><canvas id="cAge"></canvas></div></div>
     <div class="chart"><h3>Content type · views share</h3><div class="cv"><canvas id="cContent"></canvas></div></div>
   </div>
 
-  <h2 class="sec">Top Videos · Last 28 Days</h2>
+  <h2 class="sec">Top Editorial Videos · Total Views</h2>
   <div class="wall" id="wall"></div>
 
   <h2 class="sec">Strategy</h2>
@@ -159,12 +159,13 @@ const iso2dur = d => { if(!d) return ""; const m=d.match(/PT(?:(\d+)H)?(?:(\d+)M
   const h=+(m[1]||0),mi=+(m[2]||0),se=+(m[3]||0);
   return (h?h+":"+String(mi).padStart(2,"0"):mi)+":"+String(se).padStart(2,"0"); };
 const pct = (cur,prev) => { if(!prev) return null; return (cur-prev)/prev*100; };
+const WD = DATA.window_days || 60;
 const deltaHTML = (cur,prev,invert=false) => {
   const p = pct(cur,prev); if(p==null) return "";
   const good = invert ? p<0 : p>0;
   const cls = Math.abs(p)<0.5 ? "flat" : (good?"up":"down");
   const arr = p>0?"▲":(p<0?"▼":"•");
-  return `<div class="d ${cls}">${arr} ${Math.abs(p).toFixed(1)}% vs prev 28d</div>`;
+  return `<div class="d ${cls}">${arr} ${Math.abs(p).toFixed(1)}% vs prev ${WD}d</div>`;
 };
 
 // ---- unpack overview rows ----
@@ -187,17 +188,22 @@ const cards = [
   {k:"Subscribers",v:fmt(snap.subs)},
   {k:"Total Views",v:fmt(snap.total_views)},
   {k:"Videos",v:fmt(snap.videos)},
-  {k:"Net Subs · 28d",v:(netSubs>=0?"+":"")+fmt(netSubs),d:deltaHTML(netSubs,netPrev)},
-  {k:"Views · 28d",v:fmt(O.views),d:deltaHTML(O.views,P.views)},
-  {k:"Watch Time · 28d",v:fmt(Math.round(O.mins/60))+" hrs",d:deltaHTML(O.mins,P.mins)},
+  {k:"Net Subs · "+WD+"d",v:(netSubs>=0?"+":"")+fmt(netSubs),d:deltaHTML(netSubs,netPrev)},
+  {k:"Views · "+WD+"d",v:fmt(O.views),d:deltaHTML(O.views,P.views)},
+  {k:"Watch Time · "+WD+"d",v:fmt(Math.round(O.mins/60))+" hrs",d:deltaHTML(O.mins,P.mins)},
   {k:"Avg View Duration",v:fmtDur(O.avg),d:deltaHTML(O.avg,P.avg)},
-  {k:"Engagement · 28d",v:fmt(O.likes+O.comments+O.shares),d:`<div class="d flat">${fmt(O.likes)} likes · ${fmt(O.shares)} shares</div>`},
+  {k:"Engagement · "+WD+"d",v:fmt(O.likes+O.comments+O.shares),d:`<div class="d flat">${fmt(O.likes)} likes · ${fmt(O.shares)} shares</div>`},
 ];
 document.getElementById("cards").innerHTML = cards.map(c=>
   `<div class="card"><div class="k">${c.k}</div><div class="v">${c.v}</div>${c.d||""}</div>`).join("");
 
-// ---- targets ----
-const topViews = Math.max(0,...(DATA.top_videos||[]).map(v=>v.views||0));
+// ---- editorial filter (excludes old Gcore brand/promo videos) ----
+const SINCE = STRATEGY.editorial_since || "0000-00-00";
+let editorial = (DATA.top_videos||[]).filter(v => (v.published||"") >= SINCE);
+if(!editorial.length) editorial = (DATA.top_videos||[]); // safety fallback
+
+// ---- targets ---- (top video = best EDITORIAL video by LIFETIME views, the real YouTube count)
+const topViews = Math.max(0,...editorial.map(v=>v.lifetime_views||0));
 const live = {subscribers:snap.subs||0, top_video_views:topViews, monthly_5k:topViews};
 document.getElementById("targets").innerHTML = STRATEGY.targets.map(t=>{
   const cur = live[t.key]||0, p = Math.min(100, cur/t.goal*100);
@@ -260,8 +266,10 @@ new Chart(cContent,{type:"doughnut",data:{labels:content.map(r=>CT[r[0]]||r[0]),
   options:{plugins:{legend:{position:"right",labels:{boxWidth:10,font:{size:11}}}},
     maintainAspectRatio:false,cutout:"58%"}});
 
-// ---- video wall ----
-const vids=(DATA.top_videos||[]).slice(0,12);
+// ---- video wall ---- (ranked by LIFETIME views; headline number is the real
+// YouTube total, with the window's views shown as a momentum line)
+const vids=editorial.slice()
+  .sort((a,b)=>(b.lifetime_views||0)-(a.lifetime_views||0)).slice(0,12);
 document.getElementById("wall").innerHTML = vids.map((v,i)=>{
   const thumb=`https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
   return `<a class="vid" href="https://youtu.be/${v.id}" target="_blank" rel="noopener">
@@ -269,10 +277,10 @@ document.getElementById("wall").innerHTML = vids.map((v,i)=>{
       <img loading="lazy" src="${thumb}" onerror="this.src='https://i.ytimg.com/vi/${v.id}/hqdefault.jpg'" alt="">
       <span class="badge">${iso2dur(v.dur)}</span></div>
     <div class="body"><div class="t">${(v.title||v.id).replace(/</g,"&lt;")}</div>
-      <div class="m"><span><b>${fmt(v.views)}</b> views</span>
+      <div class="m"><span><b>${fmt(v.lifetime_views)}</b> views</span>
         <span><b>${fmtDur(v.avg_dur)}</b> avg</span>
-        <span><b>${fmt(v.likes)}</b> likes</span></div>
-      <div class="m"><span>${v.published||""}</span></div></div></a>`;
+        <span><b>${fmt(v.lifetime_likes)}</b> likes</span></div>
+      <div class="m"><span>${v.published||""}</span><span>+${fmt(v.views)} views · ${WD}d</span></div></div></a>`;
 }).join("");
 
 // ---- strategy ----
@@ -282,7 +290,7 @@ document.getElementById("next").innerHTML = (STRATEGY.next_up||[]).map(i=>`<li>$
 document.getElementById("mission").textContent = STRATEGY.mission;
 
 document.getElementById("foot").innerHTML =
-  `Data: YouTube Data &amp; Analytics API (channel==MINE, @gcoreofficial) · 28-day rolling window · `+
+  `Data: YouTube Data &amp; Analytics API (channel==MINE, @gcoreofficial) · video view counts are lifetime totals from the Data API · ${WD}-day rolling window for trend &amp; demographics · `+
   `auto-refreshed daily via GitHub Actions. Thumbnail CTR / impressions are Studio-only and not shown. `+
   `Built ${BUILT}. Internal — please don't share the URL publicly.`;
 </script>

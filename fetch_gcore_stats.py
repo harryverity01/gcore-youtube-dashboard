@@ -49,12 +49,13 @@ def ya(metrics, **kw):
         return {'ERR': e.code, 'b': e.read().decode()[:300]}
 
 
-end = datetime.date.today(); start = end - datetime.timedelta(days=27)
+WINDOW_DAYS = 60
+end = datetime.date.today(); start = end - datetime.timedelta(days=WINDOW_DAYS - 1)
 sd, ed = start.isoformat(), end.isoformat()
-prev_end = start - datetime.timedelta(days=1); prev_start = prev_end - datetime.timedelta(days=27)
+prev_end = start - datetime.timedelta(days=1); prev_start = prev_end - datetime.timedelta(days=WINDOW_DAYS - 1)
 psd, ped = prev_start.isoformat(), prev_end.isoformat()
 
-out = {'fetched': end.isoformat(), 'window': [sd, ed], 'prev_window': [psd, ped]}
+out = {'fetched': end.isoformat(), 'window': [sd, ed], 'prev_window': [psd, ped], 'window_days': WINDOW_DAYS}
 
 ch = data('channels?part=snippet,statistics&mine=true')['items'][0]
 out['snapshot'] = {
@@ -84,8 +85,13 @@ for i in range(0, len(ids), 50):
     batch = ids[i:i + 50]
     vr = data('videos?part=snippet,contentDetails,statistics&id=' + ','.join(batch))
     for it in vr['items']:
+        st = it.get('statistics', {})
         meta[it['id']] = {'title': it['snippet']['title'], 'dur': it['contentDetails']['duration'],
-                          'published': it['snippet']['publishedAt'][:10]}
+                          'published': it['snippet']['publishedAt'][:10],
+                          'lifetime_views': int(st.get('viewCount', 0)),
+                          'lifetime_likes': int(st.get('likeCount', 0))}
+# 'views' = views inside the window (momentum); 'lifetime_views' = total channel-wide
+# view count from the Data API — the exact number YouTube shows on the video.
 out['top_videos'] = [{'id': r[0], 'views': r[1], 'watch_min': r[2], 'avg_dur': r[3], 'likes': r[4],
                       'comments': r[5], 'shares': r[6], **meta.get(r[0], {})} for r in tv]
 
