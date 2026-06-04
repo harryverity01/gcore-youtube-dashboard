@@ -139,7 +139,7 @@ HTML = r"""<!DOCTYPE html>
       <ul class="ins" id="insights"></ul>
     </div>
     <div class="box">
-      <h3>Next up</h3>
+      <h3 id="nextHdr">Next up</h3>
       <ul class="next" id="next"></ul>
       <p style="color:var(--mut);font-size:12px;margin-top:18px;line-height:1.5" id="mission"></p>
     </div>
@@ -286,7 +286,9 @@ document.getElementById("wall").innerHTML = vids.map((v,i)=>{
 // ---- strategy ----
 document.getElementById("formula").textContent = STRATEGY.formula;
 document.getElementById("insights").innerHTML = STRATEGY.insights.map(i=>`<li>${i}</li>`).join("");
-document.getElementById("next").innerHTML = (STRATEGY.next_up||[]).map(i=>`<li>${i}</li>`).join("");
+const nextUp = STRATEGY.next_up||[];
+document.getElementById("next").innerHTML = nextUp.map(i=>`<li>${i}</li>`).join("");
+if(!nextUp.length) document.getElementById("nextHdr").style.display = "none";
 document.getElementById("mission").textContent = STRATEGY.mission;
 
 document.getElementById("foot").innerHTML =
