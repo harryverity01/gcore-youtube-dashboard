@@ -193,23 +193,28 @@ HTML = r"""<!DOCTYPE html>
     <div class="tablescroll"><table id="tvTable"></table></div>
   </div>
 
-  <h2 class="sec">Impressions &amp; CTR <span class="hint">YouTube Reporting API · reach reports + manual Studio import</span></h2>
+  <h2 class="sec">Impressions &amp; CTR <span class="hint">auto-updated daily via the YouTube Reporting API — no action needed</span></h2>
   <div class="imp">
     <div>
-      <h3>How impressions &amp; CTR are sourced</h3>
-      <p>These come from the YouTube <b>Reporting API</b> (<code>channel_reach_basic_a1</code>) which is
-        job-based: data starts ~24–48h after the job is created and backfills ~30 days max. Per video and range we show
-        <span class="tag live">live</span> report data where it exists, otherwise an
-        <span class="tag imp">imported</span> Studio value, otherwise <span class="na">n/a</span>.</p>
-      <p><b>Manual import</b> — to load history the job can't backfill, export from YouTube Studio →
-        Analytics → Advanced mode → Content tab → <b>Export current view → Comma-separated values (.csv)</b>.
-        Drop the <code>Table data.csv</code> here. Expected columns (any order):
-        <code>Video</code>, <code>Impressions</code>, <code>Impressions click-through rate (%)</code>.</p>
-      <div class="impbtns">
-        <label class="filebtn">Import Studio CSV<input type="file" id="csv" accept=".csv,text/csv" hidden></label>
-        <button class="ghost" id="csvClear">Clear import</button>
-        <span id="impStatus" style="font-size:12px;color:var(--mut)"></span>
-      </div>
+      <h3>Updates automatically every day</h3>
+      <p>Thumbnail <b>impressions</b> and <b>CTR</b> come from the YouTube <b>Reporting API</b>
+        (<code>channel_reach_basic_a1</code>) and refresh on the <b>same daily schedule as every other metric</b> —
+        you don't have to do anything. Each new day shows up as <span class="tag live">live</span> on its own.</p>
+      <p>The one API limit: this report is job-based, so it begins ~24–48h after the job is first created and
+        carries ~30 days of backfill. Dates before that show <span class="na">n/a</span> until they fill in going forward.</p>
+      <details>
+        <summary>Optional · one-time — load older CTR history (you never <i>need</i> to)</summary>
+        <p>Only if you want CTR/impressions for dates from <i>before</i> the job existed: YouTube Studio →
+          Analytics → Advanced mode → Content tab → <b>Export → Comma-separated values (.csv)</b>, then drop the
+          <code>Table data.csv</code> below (columns <code>Video</code>, <code>Impressions</code>,
+          <code>Impressions click-through rate (%)</code>). Live daily data always wins — an import only fills gaps,
+          it never overrides the automatic numbers.</p>
+        <div class="impbtns">
+          <label class="filebtn">Import Studio CSV<input type="file" id="csv" accept=".csv,text/csv" hidden></label>
+          <button class="ghost" id="csvClear">Clear import</button>
+          <span id="impStatus" style="font-size:12px;color:var(--mut)"></span>
+        </div>
+      </details>
     </div>
     <div>
       <h3>Reach reporting job</h3>
