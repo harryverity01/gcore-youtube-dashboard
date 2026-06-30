@@ -60,8 +60,14 @@ per-video impressions + clicks; the Top Videos table shows each video's
 cumulative impressions and CTR (live), growing daily.
 
 Job-based limitation (YouTube's): data starts ~24–48h after the job is first
-created and the API only provides ~30 days of history to begin with, so older
-dates show **n/a** until they fill in going forward.
+created and the API only provides ~30 days of history to begin with.
+
+**Backfill (`studio_reach.csv`):** to show real impressions/CTR immediately (and
+for history the API can't reach), a one-time YouTube Studio **Advanced mode →
+Content → Export CSV** is committed as `studio_reach.csv`. `build.py` reads it and
+fills the Top Videos table (tagged **studio**). Live Reporting-API data always
+takes precedence per video, so this is replaced automatically as the API's daily
+data arrives — no ongoing step. To refresh history later, just replace the file.
 
 ## Run locally
 

@@ -8,12 +8,51 @@ All panels are driven by an active date range chosen in the browser. Because
 the page can't call the API live, fetch_gcore_stats.py bakes day-level rows and
 this page aggregates whatever range the user picks entirely client-side.
 """
-import json, os, datetime
+import json, os, csv, datetime
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = json.load(open(os.path.join(HERE, "docs", "data.json")))
 STRATEGY = json.load(open(os.path.join(HERE, "strategy.json")))
 BUILT = datetime.datetime.utcnow().strftime("%-d %b %Y, %H:%M UTC")
+
+# Manual reach (impressions + CTR per video) from a one-time YouTube Studio
+# "Advanced mode" export, committed as studio_reach.csv. This fills the live
+# dashboard with real impressions/CTR *before* the Reporting API's daily reach
+# data begins. Live reach data (once it exists) always takes precedence in the page.
+MANUAL_REACH = {}
+_mr_path = os.path.join(HERE, "studio_reach.csv")
+if os.path.exists(_mr_path):
+    with open(_mr_path, newline="", encoding="utf-8-sig") as _f:
+        _rdr = csv.reader(_f)
+        _hdr = next(_rdr, [])
+        _low = [h.strip().lower() for h in _hdr]
+        _vi = next((i for i, h in enumerate(_low) if h in ("content", "video", "video id")), 0)
+        _ii = next((i for i, h in enumerate(_low) if "impression" in h and "ctr" not in h and "click" not in h), None)
+        _ci = next((i for i, h in enumerate(_low) if "ctr" in h or "click-through" in h or "click through" in h), None)
+        if _ii is not None:
+            for _row in _rdr:
+                if not _row or len(_row) <= max(_vi, _ii):
+                    continue
+                _vid = _row[_vi].strip()
+                if not _vid or _vid.lower() == "total":
+                    continue
+                try:
+                    _imp = int(float((_row[_ii] or "0").replace(",", "")))
+                except ValueError:
+                    _imp = 0
+                if _imp <= 0:
+                    continue
+                _ctr = None
+                if _ci is not None and _ci < len(_row):
+                    _s = (_row[_ci] or "").replace("%", "").strip()
+                    if _s:
+                        try:
+                            _ctr = round(float(_s), 2)
+                        except ValueError:
+                            _ctr = None
+                MANUAL_REACH[_vid] = {"imp": _imp, "ctr": _ctr}
+MANUAL_META = {"count": len(MANUAL_REACH), "source": "YouTube Studio export"}
+print(f"Manual reach (studio_reach.csv): {len(MANUAL_REACH)} videos")
 
 HTML = r"""<!DOCTYPE html>
 <html lang="en">
@@ -201,8 +240,9 @@ HTML = r"""<!DOCTYPE html>
         (<code>channel_reach_basic_a1</code>) and refresh on the <b>same daily schedule as every other metric</b> —
         nothing for you to do. They appear as <span class="tag live">live</span> in the Top Videos table and grow each day.</p>
       <p>The one API limit (YouTube's, not ours): this report is job-based, so it begins <b>~24–48h after the job is
-        first created</b> and the API only provides ~30 days of history to start. Until then those columns show
-        <span class="na">n/a</span> and fill in automatically from here on.</p>
+        first created</b>. <b>In the meantime the table is filled from a one-time YouTube Studio export</b> (tagged
+        <span class="tag imp">studio</span>) so the numbers are real today; once the API's daily reach data begins it
+        takes over on its own (<span class="tag live">live</span> always wins). No ongoing work for you.</p>
     </div>
     <div>
       <h3>Reach reporting job</h3>
@@ -238,6 +278,8 @@ HTML = r"""<!DOCTYPE html>
 <script>
 const DATA = __DATA__;
 const STRATEGY = __STRATEGY__;
+const MANUAL_REACH = __MANUAL_REACH__;   // video_id -> {imp, ctr} from a one-time Studio export
+const MANUAL_META = __MANUAL_META__;
 const BUILT = "__BUILT__";
 
 /* ============================ formatting ============================ */
@@ -340,11 +382,14 @@ function topVideosLifetime(){
   const since = STRATEGY.editorial_since || "0000-00-00";
   const meta = DATA.videos||{};
   let rows=(DATA.top_all_time||[]).map(v=>{
-    const m=meta[v.id]||{}, rc=reachTotal(v.id);
+    const m=meta[v.id]||{}, rc=reachTotal(v.id), mr=MANUAL_REACH[v.id];
+    // precedence: live Reporting-API reach > one-time Studio export > n/a
+    let imp=null, ctr=null, src="na";
+    if(rc){ imp=rc.imp; ctr=rc.ctr; src="live"; }
+    else if(mr){ imp=mr.imp; ctr=mr.ctr; src="studio"; }
     return {vid:v.id, title:m.title||v.id, published:m.published||"", dur:m.dur||"",
       views:(m.lifetime_views!=null?m.lifetime_views:v.views),   // TOTAL views
-      minutes:v.minutes, avgDur:v.avgDur, avgPct:v.avgPct,
-      imp: rc?rc.imp:null, ctr: rc?rc.ctr:null, csrc: rc?"live":"na"};
+      minutes:v.minutes, avgDur:v.avgDur, avgPct:v.avgPct, imp, ctr, csrc:src};
   });
   if(ed) rows=rows.filter(row=>(row.published||"")>=since);
   return rows;
@@ -481,7 +526,8 @@ const TVCOLS=[
   {k:"avgPct",l:"Avg % viewed",fmt:r=>fmt1(r.avgPct)+"%"},
   {k:"imp",l:"Impressions",fmt:r=>r.imp==null?`<span class="na">n/a</span>`:fmt(r.imp)},
   {k:"ctr",l:"CTR",fmt:r=>r.ctr==null?`<span class="na">n/a</span>`:fmt1(r.ctr)+"%"+(
-    r.csrc==="live"?`<span class="tag live" title="Live from the YouTube Reporting API, updated daily">live</span>`:``)},
+    r.csrc==="live"?`<span class="tag live" title="Live from the YouTube Reporting API, updated daily">live</span>`:
+    r.csrc==="studio"?`<span class="tag imp" title="From your YouTube Studio export — replaced automatically once the Reporting API's daily reach data begins">studio</span>`:``)},
 ];
 function renderTopVideos(){
   const rows=topVideosLifetime();
@@ -489,9 +535,12 @@ function renderTopVideos(){
     if(x==null) x=-Infinity; if(y==null) y=-Infinity;
     if(typeof x==="string") return SORT.dir*x.localeCompare(y);
     return SORT.dir*(x-y); });
+  const hasManual = MANUAL_META && MANUAL_META.count>0;
   const reachNote = REACH_DATES
     ? `impressions & CTR live from the Reporting API (${REACH_DATES[0]} → ${REACH_DATES[1]}, growing daily)`
-    : `impressions & CTR populate ~24–48h after the reach job starts, then daily`;
+    : (hasManual
+       ? `impressions & CTR from your Studio export (${MANUAL_META.count} videos) — the API's daily reach data takes over automatically once it begins`
+       : `impressions & CTR populate ~24–48h after the reach job starts, then daily`);
   document.getElementById("tvmode").textContent = `Total (lifetime) views per video · ${reachNote}`;
   let h=`<thead><tr>`+TVCOLS.map(c=>{
     const arr=(c.sortable!==false&&SORT.key===c.k)?`<span class="arr">${SORT.dir<0?"▼":"▲"}</span>`:"";
@@ -565,11 +614,13 @@ function renderJobCard(){
   else if(j.created_now){ dot="y"; st="Job created this run — first data "+(j.first_data_expected||"~24-48h"); }
   else if(j.exists){ dot="y"; st="Job exists, awaiting first reports — "+(j.first_data_expected||"~24-48h"); }
   else if(j.error){ dot="r"; st="Error: "+j.error; }
+  const manualNote = (MANUAL_META && MANUAL_META.count>0 && !j.dates)
+    ? `<div style="color:var(--blue);margin-top:8px">Currently showing a one-time Studio export for ${MANUAL_META.count} videos — live data replaces it automatically once it begins.</div>` : ``;
   document.getElementById("jobcard").innerHTML=
     `<div class="st"><span class="dot ${dot}"></span>${esc(st)}</div>`+
     `<div style="color:var(--mut);margin-top:6px">Report type <code>${esc(j.report_type||"")}</code>`+
     (j.job_id?` · job <code>${esc(j.job_id)}</code>`:``)+
-    (j.reports!=null?` · ${j.reports} report files`:``)+`</div>`;
+    (j.reports!=null?` · ${j.reports} report files`:``)+`</div>`+manualNote;
 }
 
 /* ============================ controls ============================ */
@@ -621,6 +672,8 @@ document.getElementById("foot").innerHTML =
 out = (HTML
        .replace("__DATA__", json.dumps(DATA))
        .replace("__STRATEGY__", json.dumps(STRATEGY))
+       .replace("__MANUAL_REACH__", json.dumps(MANUAL_REACH))
+       .replace("__MANUAL_META__", json.dumps(MANUAL_META))
        .replace("__BUILT__", BUILT))
 open(os.path.join(HERE, "docs", "index.html"), "w").write(out)
 print("Wrote docs/index.html (" + str(len(out)) + " bytes)")

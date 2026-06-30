@@ -55,9 +55,8 @@ any column.
 | Impressions | Reporting API `video_thumbnail_impressions` (cumulative, live) |
 | CTR | Reporting API `video_thumbnail_impressions_ctr` (cumulative, live) |
 
-Impressions/CTR show **live** where the reach job has data, otherwise **n/a**
-until it does (see below). They're cumulative across all reach data collected and
-grow daily.
+Impressions/CTR precedence per video: **live** Reporting-API reach (cumulative,
+grows daily) → **studio** (one-time `studio_reach.csv` export, see below) → **n/a**.
 
 ## Traffic sources / Content type (active range)
 
@@ -103,3 +102,13 @@ page picks the nearest window for the active range and labels it in the caption.
   OAuth app's Google Cloud project. Same `yt-analytics.readonly` scope already used
   by the Analytics API, so the token is unchanged. If it isn't enabled, the build
   still succeeds and the on-page job card says so.
+
+## Backfill: `studio_reach.csv`
+
+Because the Reporting API can't provide impressions/CTR for dates before the job
+existed (and takes ~24–48h to start), a one-time **YouTube Studio → Analytics →
+Advanced mode → Content → Export → CSV** (`Table data.csv`) is committed as
+`studio_reach.csv`. `build.py` parses it by header (`Content`/`Video`,
+`Impressions`, `Impressions click-through rate (%)`) and joins it onto videos by
+ID, tagged **studio** in the table. Live reach data always wins per video, so it's
+replaced automatically as the API catches up. Replace the file to refresh history.
