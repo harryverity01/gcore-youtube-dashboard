@@ -235,14 +235,10 @@ HTML = r"""<!DOCTYPE html>
   <h2 class="sec">Impressions &amp; CTR <span class="hint">auto-updated daily via the YouTube Reporting API — no action needed</span></h2>
   <div class="imp">
     <div>
-      <h3>Updates automatically every day</h3>
-      <p>Thumbnail <b>impressions</b> and <b>CTR</b> for each video come from the YouTube <b>Reporting API</b>
-        (<code>channel_reach_basic_a1</code>) and refresh on the <b>same daily schedule as every other metric</b> —
-        nothing for you to do. They appear as <span class="tag live">live</span> in the Top Videos table and grow each day.</p>
-      <p>The one API limit (YouTube's, not ours): this report is job-based, so it begins <b>~24–48h after the job is
-        first created</b>. <b>In the meantime the table is filled from a one-time YouTube Studio export</b> (tagged
-        <span class="tag imp">studio</span>) so the numbers are real today; once the API's daily reach data begins it
-        takes over on its own (<span class="tag live">live</span> always wins). No ongoing work for you.</p>
+      <h3>How it works</h3>
+      <p>Per-video <b>impressions &amp; CTR</b> refresh daily from the YouTube Reporting API. They currently show your
+        one-time Studio export (tagged <span class="tag imp">studio</span>); live API data replaces it automatically
+        within ~24–48h of the job starting.</p>
     </div>
     <div>
       <h3>Reach reporting job</h3>
@@ -314,6 +310,11 @@ DAILY.forEach(r=>{ dailyByDate[r[0]] = {
   subsGained:r[C.subsGained], subsLost:r[C.subsLost],
   likes:r[C.likes], comments:r[C.comments], shares:r[C.shares] }; });
 
+// Exact subscriber count = cumulative net subs over full history. YouTube's Data
+// API subscriberCount is rounded to 3 significant figures (e.g. 1,090); this sum
+// matches the exact number Studio shows (e.g. 1,097) and moves every day.
+let SUBS_EXACT = 0; DAILY.forEach(r => SUBS_EXACT += (r[C.subsGained]-r[C.subsLost]));
+
 // reach: vid -> [{date, imp, clk}]
 const reachByVid = {};
 (DATA.reach_daily||[]).forEach(([idx,vid,imp,clk])=>{
@@ -373,10 +374,19 @@ function reachTotal(vid){
   return {imp, ctr: clk/imp*100};
 }
 
-// Top-videos rows. TOTAL (lifetime) views per video — NOT date-range dependent.
+// video ids with any views in the active range (from per-day data, last 365d)
+function videosActiveInRange(r){
+  const vd=DATA.video_daily||{}, set=new Set();
+  for(const vid in vd){ const s=vd[vid];
+    for(let k=0;k<s.i.length;k++){ if(s.v[k]>0 && inRange(GRAN[s.i[k]],r)){ set.add(vid); break; } } }
+  return set;
+}
+
+// Top-videos rows. Metric VALUES are always lifetime/total per video; the date
+// range only filters WHICH videos appear (those active in the range).
 //  - views: Data API lifetime count (the number YouTube shows on the video)
 //  - watch time / avg duration / avg % viewed: all-time totals from the Analytics API
-//  - impressions / CTR: live from the Reporting API (cumulative, grows daily)
+//  - impressions / CTR: Reporting API (live) or one-time Studio export
 function topVideosLifetime(){
   const ed = document.getElementById("edOnly").checked;
   const since = STRATEGY.editorial_since || "0000-00-00";
@@ -392,6 +402,10 @@ function topVideosLifetime(){
       minutes:v.minutes, avgDur:v.avgDur, avgPct:v.avgPct, imp, ctr, csrc:src};
   });
   if(ed) rows=rows.filter(row=>(row.published||"")>=since);
+  // filter the LIST to videos active in the selected range (metric values stay lifetime).
+  // all-time, or a range reaching before the per-video window, shows every video.
+  const allTime = RANGE.preset==="all" || RANGE.start <= GRAN_START;
+  if(!allTime){ const active=videosActiveInRange(RANGE); rows=rows.filter(r=>active.has(r.vid)); }
   return rows;
 }
 
@@ -470,7 +484,7 @@ function renderSnapshot(){
   document.getElementById("handle").textContent="@gcoreofficial · channel created "+(s.created||"").slice(0,4);
   document.getElementById("phase").textContent=STRATEGY.phase||"";
   document.getElementById("built").textContent="Updated "+BUILT;
-  const cards=[{k:"Subscribers",v:fmt(s.subs)},{k:"Total Views",v:fmt(s.total_views)},
+  const cards=[{k:"Subscribers",v:fmt(SUBS_EXACT>0?SUBS_EXACT:s.subs)},{k:"Total Views",v:fmt(s.total_views)},
     {k:"Videos",v:fmt(s.videos)},{k:"Channel age",v:(s.created?Math.floor((Date.now()-Date.parse(s.created))/3.15e10):"—")+" yrs"}];
   document.getElementById("snapcards").innerHTML=cards.map(c=>`<div class="card"><div class="k">${c.k}</div><div class="v">${c.v}</div></div>`).join("");
 }
@@ -541,7 +555,9 @@ function renderTopVideos(){
     : (hasManual
        ? `impressions & CTR from your Studio export (${MANUAL_META.count} videos) — the API's daily reach data takes over automatically once it begins`
        : `impressions & CTR populate ~24–48h after the reach job starts, then daily`);
-  document.getElementById("tvmode").textContent = `Total (lifetime) views per video · ${reachNote}`;
+  const allTime = RANGE.preset==="all" || RANGE.start <= GRAN_START;
+  const scope = allTime ? `All videos` : `Videos active ${RANGE.start} → ${RANGE.end} (${rows.length})`;
+  document.getElementById("tvmode").textContent = `${scope} · lifetime views & impressions · ${reachNote}`;
   let h=`<thead><tr>`+TVCOLS.map(c=>{
     const arr=(c.sortable!==false&&SORT.key===c.k)?`<span class="arr">${SORT.dir<0?"▼":"▲"}</span>`:"";
     return `<th class="${c.cls||""} ${c.sortable!==false?"sortable":""}" data-k="${c.k}" data-sortable="${c.sortable!==false}">${c.l}${arr}</th>`;
@@ -552,7 +568,7 @@ function renderTopVideos(){
     return `<tr><td>${i+1}</td><td class="l">${tcell}</td>`+
       TVCOLS.slice(2).map(c=>`<td>${c.fmt(r)}</td>`).join("")+`</tr>`;
   }).join("");
-  if(!rows.length) h+=`<tr><td class="l na" colspan="${TVCOLS.length}">No videos found.</td></tr>`;
+  if(!rows.length) h+=`<tr><td class="l na" colspan="${TVCOLS.length}">No videos with views in this range.</td></tr>`;
   h+=`</tbody>`;
   const t=document.getElementById("tvTable"); t.innerHTML=h;
   t.querySelectorAll("th[data-sortable='true']").forEach(th=>th.onclick=()=>{
@@ -591,7 +607,7 @@ function renderDistributions(){
 function renderTargets(){
   const meta=DATA.videos||{};
   const topLifetime=Math.max(0,...Object.values(meta).map(v=>v.lifetime_views||0));
-  const live={subscribers:(DATA.snapshot||{}).subs||0, top_video_views:topLifetime, monthly_5k:bestWindowViews(28)};
+  const live={subscribers:(SUBS_EXACT>0?SUBS_EXACT:((DATA.snapshot||{}).subs||0)), top_video_views:topLifetime, monthly_5k:bestWindowViews(28)};
   document.getElementById("targets")&&(document.getElementById("targets").innerHTML=(STRATEGY.targets||[]).map(t=>{
     const cur=live[t.key]||0, p=Math.min(100,cur/t.goal*100);
     return `<div class="prog"><div class="top"><span class="lab">${t.label}</span>
@@ -651,12 +667,9 @@ function wireToggles(){
 /* ============================ orchestration ============================ */
 function renderAll(){
   try{ localStorage.setItem("gcore_range_v1",JSON.stringify(RANGE)); }catch(e){}
-  syncInputs(); renderOverview(); renderDaily(); renderDistributions(); renderTargets();
-  // top-videos table is lifetime/total per video → range-independent, rendered once at init
+  syncInputs(); renderOverview(); renderDaily(); renderTopVideos(); renderDistributions(); renderTargets();
 }
-renderSnapshot(); renderStrategy(); renderJobCard(); renderControls(); wireToggles();
-renderTopVideos();   // lifetime totals — not affected by the date range
-renderAll();
+renderSnapshot(); renderStrategy(); renderJobCard(); renderControls(); wireToggles(); renderAll();
 
 document.getElementById("foot").innerHTML =
   `Data: YouTube Data API (lifetime snapshot + video metadata), Analytics API v2 (day-granular views, `+

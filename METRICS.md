@@ -43,8 +43,15 @@ table stays daily (latest 800 rows shown for very long ranges).*
 
 ## Top Videos (sortable)
 
-**Lifetime totals per video — not affected by the date range above.** Sortable by
-any column.
+**Metric values are lifetime/total per video.** The date range filters *which*
+videos appear — those with views in the selected range (from the per-video daily
+data, last 365d); **All time** shows every video. So 7d/28d/etc. narrow the list
+to what was active in that period while still showing each video's lifetime views
+and impressions. Sortable by any column.
+
+Subscriber count on the snapshot is the exact cumulative net subs
+(`subscribersGained − subscribersLost` over full history) — the Data API's
+`subscriberCount` is rounded to 3 significant figures, this matches Studio.
 
 | Column | Source |
 |---|---|
