@@ -223,7 +223,7 @@ HTML = r"""<!DOCTYPE html>
     <p class="cap" id="dailycap"></p><div class="cv" style="height:280px"><canvas id="cDaily"></canvas></div></div>
   <div class="tablewrap"><div class="tablescroll"><table id="dailyTable"></table></div></div>
 
-  <h2 class="sec">Top Videos <span class="hint">total (lifetime) views per video · impressions &amp; CTR update daily</span></h2>
+  <h2 class="sec">Top Videos <span class="hint">filter by publish date · lifetime views, impressions &amp; CTR · sortable</span></h2>
   <div class="tablewrap">
     <div class="tabletools">
       <label class="switch"><input type="checkbox" id="edOnly"> Editorial only</label>
@@ -374,16 +374,16 @@ function reachTotal(vid){
   return {imp, ctr: clk/imp*100};
 }
 
-// video ids with any views in the active range (from per-day data, last 365d)
-function videosActiveInRange(r){
-  const vd=DATA.video_daily||{}, set=new Set();
-  for(const vid in vd){ const s=vd[vid];
-    for(let k=0;k<s.i.length;k++){ if(s.v[k]>0 && inRange(GRAN[s.i[k]],r)){ set.add(vid); break; } } }
-  return set;
+// publish-date window for the active range — natural calendar dates (NOT clamped
+// to data latency, so a video published yesterday still counts). null = all videos.
+function publishWindow(){
+  if(RANGE.preset==="all") return null;
+  if(RANGE.preset && RANGE.preset!=="custom") return presetRange(RANGE.preset);
+  return {start:RANGE.start, end:RANGE.end};
 }
 
 // Top-videos rows. Metric VALUES are always lifetime/total per video; the date
-// range only filters WHICH videos appear (those active in the range).
+// range filters WHICH videos appear (those PUBLISHED in the range).
 //  - views: Data API lifetime count (the number YouTube shows on the video)
 //  - watch time / avg duration / avg % viewed: all-time totals from the Analytics API
 //  - impressions / CTR: Reporting API (live) or one-time Studio export
@@ -391,21 +391,25 @@ function topVideosLifetime(){
   const ed = document.getElementById("edOnly").checked;
   const since = STRATEGY.editorial_since || "0000-00-00";
   const meta = DATA.videos||{};
-  let rows=(DATA.top_all_time||[]).map(v=>{
-    const m=meta[v.id]||{}, rc=reachTotal(v.id), mr=MANUAL_REACH[v.id];
+  const aById = {}; (DATA.top_all_time||[]).forEach(v=>aById[v.id]=v);   // all-time analytics by id
+  // Build from the FULL catalog (every upload), so recent videos with no Analytics
+  // data yet still appear. Analytics columns are n/a for those until data lands.
+  let rows=Object.keys(meta).map(id=>{
+    const m=meta[id]||{}, a=aById[id]||{}, rc=reachTotal(id), mr=MANUAL_REACH[id];
     // precedence: live Reporting-API reach > one-time Studio export > n/a
     let imp=null, ctr=null, src="na";
     if(rc){ imp=rc.imp; ctr=rc.ctr; src="live"; }
     else if(mr){ imp=mr.imp; ctr=mr.ctr; src="studio"; }
-    return {vid:v.id, title:m.title||v.id, published:m.published||"", dur:m.dur||"",
-      views:(m.lifetime_views!=null?m.lifetime_views:v.views),   // TOTAL views
-      minutes:v.minutes, avgDur:v.avgDur, avgPct:v.avgPct, imp, ctr, csrc:src};
+    return {vid:id, title:m.title||id, published:m.published||"", dur:m.dur||"",
+      views:(m.lifetime_views!=null?m.lifetime_views:(a.views!=null?a.views:0)),   // TOTAL (lifetime) views
+      minutes:(a.minutes!=null?a.minutes:null), avgDur:(a.avgDur!=null?a.avgDur:null),
+      avgPct:(a.avgPct!=null?a.avgPct:null), imp, ctr, csrc:src};
   });
   if(ed) rows=rows.filter(row=>(row.published||"")>=since);
-  // filter the LIST to videos active in the selected range (metric values stay lifetime).
-  // all-time, or a range reaching before the per-video window, shows every video.
-  const allTime = RANGE.preset==="all" || RANGE.start <= GRAN_START;
-  if(!allTime){ const active=videosActiveInRange(RANGE); rows=rows.filter(r=>active.has(r.vid)); }
+  // filter the LIST to videos PUBLISHED in the selected range (values stay lifetime).
+  // "All time" applies no publish filter.
+  const pw = publishWindow();
+  if(pw){ rows=rows.filter(r => r.published && r.published>=pw.start && r.published<=pw.end); }
   return rows;
 }
 
@@ -535,9 +539,9 @@ const TVCOLS=[
   {k:"rank",l:"#",cls:"",sortable:false},
   {k:"title",l:"Video",cls:"l",sortable:false},
   {k:"views",l:"Total views",fmt:r=>fmt(r.views)},
-  {k:"minutes",l:"Watch time",fmt:r=>fmtHrs(r.minutes)},
-  {k:"avgDur",l:"Avg duration",fmt:r=>fmtDur(r.avgDur)},
-  {k:"avgPct",l:"Avg % viewed",fmt:r=>fmt1(r.avgPct)+"%"},
+  {k:"minutes",l:"Watch time",fmt:r=>r.minutes==null?`<span class="na">n/a</span>`:fmtHrs(r.minutes)},
+  {k:"avgDur",l:"Avg duration",fmt:r=>r.avgDur==null?`<span class="na">n/a</span>`:fmtDur(r.avgDur)},
+  {k:"avgPct",l:"Avg % viewed",fmt:r=>r.avgPct==null?`<span class="na">n/a</span>`:fmt1(r.avgPct)+"%"},
   {k:"imp",l:"Impressions",fmt:r=>r.imp==null?`<span class="na">n/a</span>`:fmt(r.imp)},
   {k:"ctr",l:"CTR",fmt:r=>r.ctr==null?`<span class="na">n/a</span>`:fmt1(r.ctr)+"%"+(
     r.csrc==="live"?`<span class="tag live" title="Live from the YouTube Reporting API, updated daily">live</span>`:
@@ -555,8 +559,8 @@ function renderTopVideos(){
     : (hasManual
        ? `impressions & CTR from your Studio export (${MANUAL_META.count} videos) — the API's daily reach data takes over automatically once it begins`
        : `impressions & CTR populate ~24–48h after the reach job starts, then daily`);
-  const allTime = RANGE.preset==="all" || RANGE.start <= GRAN_START;
-  const scope = allTime ? `All videos` : `Videos active ${RANGE.start} → ${RANGE.end} (${rows.length})`;
+  const pw = publishWindow();
+  const scope = pw ? `Published ${pw.start} → ${pw.end} (${rows.length})` : `All videos (${rows.length})`;
   document.getElementById("tvmode").textContent = `${scope} · lifetime views & impressions · ${reachNote}`;
   let h=`<thead><tr>`+TVCOLS.map(c=>{
     const arr=(c.sortable!==false&&SORT.key===c.k)?`<span class="arr">${SORT.dir<0?"▼":"▲"}</span>`:"";
@@ -568,7 +572,7 @@ function renderTopVideos(){
     return `<tr><td>${i+1}</td><td class="l">${tcell}</td>`+
       TVCOLS.slice(2).map(c=>`<td>${c.fmt(r)}</td>`).join("")+`</tr>`;
   }).join("");
-  if(!rows.length) h+=`<tr><td class="l na" colspan="${TVCOLS.length}">No videos with views in this range.</td></tr>`;
+  if(!rows.length) h+=`<tr><td class="l na" colspan="${TVCOLS.length}">No videos published in this range.</td></tr>`;
   h+=`</tbody>`;
   const t=document.getElementById("tvTable"); t.innerHTML=h;
   t.querySelectorAll("th[data-sortable='true']").forEach(th=>th.onclick=()=>{

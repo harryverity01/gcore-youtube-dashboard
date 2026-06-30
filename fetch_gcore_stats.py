@@ -131,7 +131,8 @@ def day_chunks(start, end, size=365):
 # ===========================================================================
 # 1) Channel snapshot (lifetime, from the Data API)
 # ===========================================================================
-ch = data('channels?part=snippet,statistics&mine=true')['items'][0]
+ch = data('channels?part=snippet,statistics,contentDetails&mine=true')['items'][0]
+uploads_playlist = ch.get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads')
 created = datetime.date.fromisoformat(ch['snippet']['publishedAt'][:10])
 snapshot = {
     'title': ch['snippet']['title'], 'id': ch['id'],
@@ -204,9 +205,27 @@ out['video_daily'] = video_daily
 sys.stderr.write(f"Tracked videos with daily series: {len(video_daily)}/{len(track_ids)}\n")
 
 # ===========================================================================
-# 4) Video metadata (titles, durations, lifetime counts) for every id we reference
+# 4) Video metadata (titles, durations, lifetime counts).
+#    Pull the FULL uploads catalog so even videos published in the last few days
+#    (no Analytics data yet) appear — needed for publish-date filtering. Falls
+#    back to just the referenced ids if the uploads playlist can't be listed.
 # ===========================================================================
-need_ids = list(dict.fromkeys(track_ids + [v['id'] for v in out['top_all_time']]))
+catalog_ids = []
+if uploads_playlist:
+    try:
+        page = None
+        while True:
+            url = ('playlistItems?part=contentDetails&maxResults=50&playlistId=' + uploads_playlist
+                   + (('&pageToken=' + page) if page else ''))
+            r = data(url)
+            catalog_ids += [it['contentDetails']['videoId'] for it in r.get('items', [])]
+            page = r.get('nextPageToken')
+            if not page:
+                break
+    except Exception as e:
+        sys.stderr.write(f"  ! uploads catalog list failed: {e}\n")
+need_ids = list(dict.fromkeys(catalog_ids + track_ids + [v['id'] for v in out['top_all_time']]))
+sys.stderr.write(f"Catalog: {len(catalog_ids)} uploads, {len(need_ids)} ids to fetch metadata for\n")
 meta = {}
 for i in range(0, len(need_ids), 50):
     batch = need_ids[i:i + 50]

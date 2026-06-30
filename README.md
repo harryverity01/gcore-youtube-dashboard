@@ -44,7 +44,7 @@ whatever range you pick **entirely client-side**.
 | Channel snapshot (subs, total views, videos, age) | Data API — **lifetime**, not range-dependent |
 | Performance cards (views, watch time, avg view duration, net subs, likes, comments, shares) + deltas | Analytics per-day series, aggregated for the range vs the previous equal-length period |
 | Daily breakdown (line chart + table) | Analytics `day` dimension |
-| Top videos (sortable: total views, watch time, avg duration, avg % viewed, impressions, CTR) | **Lifetime values per video** (total views from the Data API; watch time/avg duration/avg % viewed all-time; impressions/CTR from Reporting API or Studio export). The date range **filters which videos appear** (those active in the range); All time shows every video. |
+| Top videos (sortable: total views, watch time, avg duration, avg % viewed, impressions, CTR) | **Lifetime values per video** (total views from the Data API; watch time/avg duration/avg % viewed all-time; impressions/CTR from Reporting API or Studio export). The date range **filters which videos appear** (those **published** in the range); All time shows every video. |
 | Traffic sources / Content type | Analytics `day,insightTrafficSourceType` / `day,creatorContentType` |
 | Geography / Audience age | Analytics per **preset window** (geo has too many keys; `viewerPercentage` can't be sliced by day) |
 

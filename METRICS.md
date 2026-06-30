@@ -44,10 +44,12 @@ table stays daily (latest 800 rows shown for very long ranges).*
 ## Top Videos (sortable)
 
 **Metric values are lifetime/total per video.** The date range filters *which*
-videos appear — those with views in the selected range (from the per-video daily
-data, last 365d); **All time** shows every video. So 7d/28d/etc. narrow the list
-to what was active in that period while still showing each video's lifetime views
-and impressions. Sortable by any column.
+videos appear — those **published** in the selected range; **All time** shows every
+video. So 7d/28d narrow the list to videos that went live in that window while
+still showing each video's lifetime views and impressions. Sortable by any column.
+The full upload catalog is pulled from the Data API (uploads playlist), so videos
+published in the last few days appear even before Analytics data exists for them
+(their watch time / avg duration / avg % show `n/a` until it does).
 
 Subscriber count on the snapshot is the exact cumulative net subs
 (`subscribersGained − subscribersLost` over full history) — the Data API's
