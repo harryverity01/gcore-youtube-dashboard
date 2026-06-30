@@ -41,26 +41,23 @@ Analytics `dimensions=day`, one row per day in range:
 *The chart buckets to weekly when a range exceeds ~140 days, for readability; the
 table stays daily (latest 800 rows shown for very long ranges).*
 
-## Top Videos (sortable, active range)
+## Top Videos (sortable)
 
-Two modes, shown in the caption under the table:
-
-- **Range mode** (range within the last 365 days): per-video `dimensions=day,
-  filters=video==<id>` summed for the range, re-ranked live.
-- **All-time mode** (range = all-time, or it extends before the 365-day per-video
-  window): the all-time per-video table (`dimensions=video` over channel history).
+**Lifetime totals per video — not affected by the date range above.** Sortable by
+any column.
 
 | Column | Source |
 |---|---|
-| Views | Analytics `views` |
-| Watch time | Analytics `estimatedMinutesWatched` (hours) |
-| Avg duration | Analytics `averageViewDuration` (range = Σwatch-seconds ÷ Σviews) |
-| Avg % viewed | Analytics `averageViewPercentage` (views-weighted across the range) |
-| Impressions | Reporting API `video_thumbnail_impressions` (live) or Studio import |
-| CTR | Reporting API `video_thumbnail_impressions_ctr` (live) or Studio import |
+| Total views | **Data API** `videos.statistics.viewCount` — the lifetime count YouTube shows on the video |
+| Watch time | Analytics `estimatedMinutesWatched`, all-time (`dimensions=video` over channel history) |
+| Avg duration | Analytics `averageViewDuration`, all-time |
+| Avg % viewed | Analytics `averageViewPercentage`, all-time |
+| Impressions | Reporting API `video_thumbnail_impressions` (cumulative, live) |
+| CTR | Reporting API `video_thumbnail_impressions_ctr` (cumulative, live) |
 
-CTR/impressions precedence per video+range: **live** reach data → **imported**
-Studio value → **n/a**.
+Impressions/CTR show **live** where the reach job has data, otherwise **n/a**
+until it does (see below). They're cumulative across all reach data collected and
+grow daily.
 
 ## Traffic sources / Content type (active range)
 
@@ -88,7 +85,7 @@ page picks the nearest window for the active range and labels it in the caption.
 
 # Impressions & CTR
 
-## A. Reporting API reach reports (automated)
+**Fully automated — no manual step.**
 
 - Report type: **`channel_reach_basic_a1`**
   - Dimensions: `date`, `channel_id`, `video_id`
@@ -98,32 +95,11 @@ page picks the nearest window for the active range and labels it in the caption.
   daily report CSVs, parses the header to locate the columns (no hard-coded
   positions), and bakes per (video, day): **impressions** and **clicks**
   (clicks = impressions × CTR, with the CTR fraction/percent unit auto-detected).
-  The page recomputes range CTR = Σclicks ÷ Σimpressions, so any sub-range
-  aggregates correctly.
+  The Top Videos table shows each video's **cumulative** CTR = Σclicks ÷ Σimpressions.
 - **Timing:** the Reporting API is job-based — data only starts **~24–48h after
-  the job is created** and backfills **~30 days max**.
-
-## B. Manual Studio import (for older history)
-
-On the page: **Impressions & CTR → Import Studio CSV**. Parsed in-browser,
-persisted in `localStorage`, joined onto videos by **video ID**. Use it to load
-history the reporting job can't backfill.
-
-### Exact export to use
-
-YouTube Studio → **Analytics** → **Advanced mode** → **Content** tab →
-**Export current view → Comma-separated values (.csv)** → open the
-**`Table data.csv`** from the downloaded zip.
-
-The importer matches columns **by header name** (any order, extra columns
-ignored). It needs:
-
-| Column header (as Studio exports it) | Used for |
-|---|---|
-| `Video` | the 11-char video ID (the join key; the `Total` row is skipped) |
-| `Impressions` | impressions |
-| `Impressions click-through rate (%)` | CTR (percent) |
-
-`Content` is accepted as an alias for `Video`; any header containing
-`click-through`/`ctr` is accepted for CTR. Commas, spaces and a trailing `%` are
-stripped from numbers. See **`studio_import_example.csv`** for the exact shape.
+  the job is created** and provides **~30 days** of history to begin with, then a
+  new day is added every day. Older dates show **n/a** until they fill in.
+- **Prerequisite (one-time):** the *YouTube Reporting API* must be enabled on the
+  OAuth app's Google Cloud project. Same `yt-analytics.readonly` scope already used
+  by the Analytics API, so the token is unchanged. If it isn't enabled, the build
+  still succeeds and the on-page job card says so.

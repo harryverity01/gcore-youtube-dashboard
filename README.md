@@ -44,26 +44,24 @@ whatever range you pick **entirely client-side**.
 | Channel snapshot (subs, total views, videos, age) | Data API — **lifetime**, not range-dependent |
 | Performance cards (views, watch time, avg view duration, net subs, likes, comments, shares) + deltas | Analytics per-day series, aggregated for the range vs the previous equal-length period |
 | Daily breakdown (line chart + table) | Analytics `day` dimension |
-| Top videos (sortable: views, watch time, avg duration, avg % viewed, impressions, CTR) | Analytics per-video per-day (range) or all-time table; impressions/CTR joined from Reporting API |
+| Top videos (sortable: total views, watch time, avg duration, avg % viewed, impressions, CTR) | **Lifetime totals per video** (not range-dependent): total views from the Data API, watch time/avg duration/avg % viewed from all-time Analytics, impressions/CTR live from the Reporting API |
 | Traffic sources / Content type | Analytics `day,insightTrafficSourceType` / `day,creatorContentType` |
 | Geography / Audience age | Analytics per **preset window** (geo has too many keys; `viewerPercentage` can't be sliced by day) |
 
-See **[METRICS.md](METRICS.md)** for the exact API metric behind every number and
-the precise Studio CSV format for manual imports.
+See **[METRICS.md](METRICS.md)** for the exact API metric behind every number.
 
-## Impressions & CTR (two sources)
+## Impressions & CTR (fully automated)
 
-Impressions/CTR are **not** in the Analytics API. They come from:
+Impressions/CTR are **not** in the Analytics API — they come from the
+**Reporting API** reach report `channel_reach_basic_a1` and update on the same
+daily schedule as everything else, with **no manual step**. The fetch script
+check-or-creates the reporting job each run, downloads the daily CSVs, and bakes
+per-video impressions + clicks; the Top Videos table shows each video's
+cumulative impressions and CTR (live), growing daily.
 
-1. **Reporting API reach reports** (automated). Job-based: data starts ~24–48h
-   after the job is created and backfills ~30 days max. The fetch script
-   check-or-creates the job each run.
-2. **Manual Studio import** (for history the job can't backfill). On the page,
-   *Import Studio CSV* reads a YouTube Studio **Advanced mode** export in-browser
-   and stores it in `localStorage`. See METRICS.md / `studio_import_example.csv`.
-
-Per video and range the table shows **live** report data where it exists,
-otherwise the **imported** Studio value, otherwise **n/a**.
+Job-based limitation (YouTube's): data starts ~24–48h after the job is first
+created and the API only provides ~30 days of history to begin with, so older
+dates show **n/a** until they fill in going forward.
 
 ## Run locally
 

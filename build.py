@@ -184,7 +184,7 @@ HTML = r"""<!DOCTYPE html>
     <p class="cap" id="dailycap"></p><div class="cv" style="height:280px"><canvas id="cDaily"></canvas></div></div>
   <div class="tablewrap"><div class="tablescroll"><table id="dailyTable"></table></div></div>
 
-  <h2 class="sec">Top Videos <span class="hint" id="tvhint"></span></h2>
+  <h2 class="sec">Top Videos <span class="hint">total (lifetime) views per video · impressions &amp; CTR update daily</span></h2>
   <div class="tablewrap">
     <div class="tabletools">
       <label class="switch"><input type="checkbox" id="edOnly"> Editorial only</label>
@@ -197,24 +197,12 @@ HTML = r"""<!DOCTYPE html>
   <div class="imp">
     <div>
       <h3>Updates automatically every day</h3>
-      <p>Thumbnail <b>impressions</b> and <b>CTR</b> come from the YouTube <b>Reporting API</b>
+      <p>Thumbnail <b>impressions</b> and <b>CTR</b> for each video come from the YouTube <b>Reporting API</b>
         (<code>channel_reach_basic_a1</code>) and refresh on the <b>same daily schedule as every other metric</b> —
-        you don't have to do anything. Each new day shows up as <span class="tag live">live</span> on its own.</p>
-      <p>The one API limit: this report is job-based, so it begins ~24–48h after the job is first created and
-        carries ~30 days of backfill. Dates before that show <span class="na">n/a</span> until they fill in going forward.</p>
-      <details>
-        <summary>Optional · one-time — load older CTR history (you never <i>need</i> to)</summary>
-        <p>Only if you want CTR/impressions for dates from <i>before</i> the job existed: YouTube Studio →
-          Analytics → Advanced mode → Content tab → <b>Export → Comma-separated values (.csv)</b>, then drop the
-          <code>Table data.csv</code> below (columns <code>Video</code>, <code>Impressions</code>,
-          <code>Impressions click-through rate (%)</code>). Live daily data always wins — an import only fills gaps,
-          it never overrides the automatic numbers.</p>
-        <div class="impbtns">
-          <label class="filebtn">Import Studio CSV<input type="file" id="csv" accept=".csv,text/csv" hidden></label>
-          <button class="ghost" id="csvClear">Clear import</button>
-          <span id="impStatus" style="font-size:12px;color:var(--mut)"></span>
-        </div>
-      </details>
+        nothing for you to do. They appear as <span class="tag live">live</span> in the Top Videos table and grow each day.</p>
+      <p>The one API limit (YouTube's, not ours): this report is job-based, so it begins <b>~24–48h after the job is
+        first created</b> and the API only provides ~30 days of history to start. Until then those columns show
+        <span class="na">n/a</span> and fill in automatically from here on.</p>
     </div>
     <div>
       <h3>Reach reporting job</h3>
@@ -291,13 +279,6 @@ const reachByVid = {};
 });
 const REACH_DATES = (DATA.reach_job&&DATA.reach_job.dates)||null;
 
-/* ============================ manual Studio import (localStorage) ============================ */
-const LS_KEY="gcore_studio_v1";
-let STUDIO = {};   // vid -> {imp, ctr}
-let STUDIO_META = null;
-(function(){ try{ const j=JSON.parse(localStorage.getItem(LS_KEY)||"null");
-  if(j){ STUDIO=j.map||{}; STUDIO_META=j.meta||null; } }catch(e){} })();
-
 /* ============================ range state ============================ */
 const PRESETS = [
   ["7","Last 7d"],["28","Last 28d"],["90","Last 90d"],
@@ -340,50 +321,43 @@ function dailyRows(r){
   return rows;
 }
 
-// reach impressions+clicks for a video over a range -> {imp, ctr} or null
-function reachFor(vid,r){
-  const arr=reachByVid[vid]; if(!arr) return null;
-  let imp=0, clk=0, n=0;
-  arr.forEach(x=>{ if(inRange(x.date,r)){ imp+=x.imp; clk+=x.clk; n++; } });
-  if(!n||!imp) return null;
-  return {imp, ctr: imp? clk/imp*100 : 0};
-}
-// resolve impressions/CTR for a video+range with precedence: live > imported > n/a
-function ctrCell(vid,r){
-  const live=reachFor(vid,r);
-  if(live) return {imp:live.imp, ctr:live.ctr, src:"live"};
-  const st=STUDIO[vid];
-  if(st && (st.imp!=null||st.ctr!=null)) return {imp:st.imp, ctr:st.ctr, src:"imp"};
-  return {imp:null, ctr:null, src:"na"};
+// Cumulative impressions + CTR for a video across ALL reach data we have
+// (the Reporting API only provides data from job creation onward; it grows daily).
+function reachTotal(vid){
+  const arr=reachByVid[vid]; if(!arr||!arr.length) return null;
+  let imp=0, clk=0;
+  arr.forEach(x=>{ imp+=x.imp; clk+=x.clk; });
+  if(!imp) return null;
+  return {imp, ctr: clk/imp*100};
 }
 
-// is the active range fully inside the per-video baked window?
-function rangeInGran(r){ return r.start>=GRAN_START; }
-
-// build top-video rows for the range
-function topVideos(r){
+// Top-videos rows. TOTAL (lifetime) views per video — NOT date-range dependent.
+//  - views: Data API lifetime count (the number YouTube shows on the video)
+//  - watch time / avg duration / avg % viewed: all-time totals from the Analytics API
+//  - impressions / CTR: live from the Reporting API (cumulative, grows daily)
+function topVideosLifetime(){
   const ed = document.getElementById("edOnly").checked;
   const since = STRATEGY.editorial_since || "0000-00-00";
   const meta = DATA.videos||{};
-  let rows=[], mode;
-  if(rangeInGran(r)){
-    mode="range";
-    const vd=DATA.video_daily||{};
-    for(const vid in vd){
-      const s=vd[vid]; let views=0,minutes=0,wsec=0,apw=0;
-      for(let k=0;k<s.i.length;k++){ const date=GRAN[s.i[k]]; if(!inRange(date,r)) continue;
-        views+=s.v[k]; minutes+=s.w[k]; apw+=s.ap[k]*s.v[k]; }
-      if(views<=0) continue;
-      rows.push({vid, views, minutes, avgDur:(minutes*60)/views, avgPct: views?apw/views:0});
-    }
-  } else {
-    mode="alltime";
-    (DATA.top_all_time||[]).forEach(v=>rows.push({vid:v.id, views:v.views, minutes:v.minutes, avgDur:v.avgDur, avgPct:v.avgPct}));
-  }
-  rows.forEach(row=>{ const m=meta[row.vid]||{}; row.title=m.title||row.vid; row.published=m.published||"";
-    row.dur=m.dur||""; const cc=ctrCell(row.vid,r); row.imp=cc.imp; row.ctr=cc.ctr; row.csrc=cc.src; });
+  let rows=(DATA.top_all_time||[]).map(v=>{
+    const m=meta[v.id]||{}, rc=reachTotal(v.id);
+    return {vid:v.id, title:m.title||v.id, published:m.published||"", dur:m.dur||"",
+      views:(m.lifetime_views!=null?m.lifetime_views:v.views),   // TOTAL views
+      minutes:v.minutes, avgDur:v.avgDur, avgPct:v.avgPct,
+      imp: rc?rc.imp:null, ctr: rc?rc.ctr:null, csrc: rc?"live":"na"};
+  });
   if(ed) rows=rows.filter(row=>(row.published||"")>=since);
-  return {rows, mode};
+  return rows;
+}
+
+// best single video's view count within the last N days (for the monthly-performer target)
+function bestWindowViews(days){
+  const r={start:addDays(TODAY,-(days-1)), end:TODAY}, vd=DATA.video_daily||{};
+  let best=0;
+  for(const vid in vd){ const s=vd[vid]; let v=0;
+    for(let k=0;k<s.i.length;k++){ if(inRange(GRAN[s.i[k]],r)) v+=s.v[k]; }
+    if(v>best) best=v; }
+  return best;
 }
 
 /* window picker for geo/demographics (cannot be sliced per arbitrary day) */
@@ -501,26 +475,24 @@ function renderDaily(){
 const TVCOLS=[
   {k:"rank",l:"#",cls:"",sortable:false},
   {k:"title",l:"Video",cls:"l",sortable:false},
-  {k:"views",l:"Views",fmt:r=>fmt(r.views)},
+  {k:"views",l:"Total views",fmt:r=>fmt(r.views)},
   {k:"minutes",l:"Watch time",fmt:r=>fmtHrs(r.minutes)},
   {k:"avgDur",l:"Avg duration",fmt:r=>fmtDur(r.avgDur)},
   {k:"avgPct",l:"Avg % viewed",fmt:r=>fmt1(r.avgPct)+"%"},
   {k:"imp",l:"Impressions",fmt:r=>r.imp==null?`<span class="na">n/a</span>`:fmt(r.imp)},
   {k:"ctr",l:"CTR",fmt:r=>r.ctr==null?`<span class="na">n/a</span>`:fmt1(r.ctr)+"%"+(
-    r.csrc==="live"?`<span class="tag live" title="Live Reporting API reach data for the selected range">live</span>`:
-    r.csrc==="imp"?`<span class="tag imp" title="Imported Studio total — reflects your export's range, not sliced to the selected range">imp</span>`:``)},
+    r.csrc==="live"?`<span class="tag live" title="Live from the YouTube Reporting API, updated daily">live</span>`:``)},
 ];
 function renderTopVideos(){
-  const {rows,mode}=topVideos(RANGE);
+  const rows=topVideosLifetime();
   rows.sort((a,b)=>{ let x=a[SORT.key], y=b[SORT.key];
     if(x==null) x=-Infinity; if(y==null) y=-Infinity;
     if(typeof x==="string") return SORT.dir*x.localeCompare(y);
     return SORT.dir*(x-y); });
-  const reachNote = REACH_DATES ? `live reach ${REACH_DATES[0]}→${REACH_DATES[1]}` : `no live reach data yet`;
-  document.getElementById("tvmode").textContent = (mode==="range"
-    ? `Measured over ${RANGE.start} → ${RANGE.end}`
-    : `All-time totals (range extends before the ${DATA.granular_days}d per-video window)`) + ` · ${reachNote}`;
-  document.getElementById("tvhint").textContent = mode==="range" ? "re-ranked for the selected range" : "all-time";
+  const reachNote = REACH_DATES
+    ? `impressions & CTR live from the Reporting API (${REACH_DATES[0]} → ${REACH_DATES[1]}, growing daily)`
+    : `impressions & CTR populate ~24–48h after the reach job starts, then daily`;
+  document.getElementById("tvmode").textContent = `Total (lifetime) views per video · ${reachNote}`;
   let h=`<thead><tr>`+TVCOLS.map(c=>{
     const arr=(c.sortable!==false&&SORT.key===c.k)?`<span class="arr">${SORT.dir<0?"▼":"▲"}</span>`:"";
     return `<th class="${c.cls||""} ${c.sortable!==false?"sortable":""}" data-k="${c.k}" data-sortable="${c.sortable!==false}">${c.l}${arr}</th>`;
@@ -531,7 +503,7 @@ function renderTopVideos(){
     return `<tr><td>${i+1}</td><td class="l">${tcell}</td>`+
       TVCOLS.slice(2).map(c=>`<td>${c.fmt(r)}</td>`).join("")+`</tr>`;
   }).join("");
-  if(!rows.length) h+=`<tr><td class="l na" colspan="${TVCOLS.length}">No videos with views in this range.</td></tr>`;
+  if(!rows.length) h+=`<tr><td class="l na" colspan="${TVCOLS.length}">No videos found.</td></tr>`;
   h+=`</tbody>`;
   const t=document.getElementById("tvTable"); t.innerHTML=h;
   t.querySelectorAll("th[data-sortable='true']").forEach(th=>th.onclick=()=>{
@@ -570,8 +542,7 @@ function renderDistributions(){
 function renderTargets(){
   const meta=DATA.videos||{};
   const topLifetime=Math.max(0,...Object.values(meta).map(v=>v.lifetime_views||0));
-  const {rows}=topVideos(RANGE); const topRange=rows.length?Math.max(...rows.map(r=>r.views)):0;
-  const live={subscribers:(DATA.snapshot||{}).subs||0, top_video_views:topLifetime, monthly_5k:topRange};
+  const live={subscribers:(DATA.snapshot||{}).subs||0, top_video_views:topLifetime, monthly_5k:bestWindowViews(28)};
   document.getElementById("targets")&&(document.getElementById("targets").innerHTML=(STRATEGY.targets||[]).map(t=>{
     const cur=live[t.key]||0, p=Math.min(100,cur/t.goal*100);
     return `<div class="prog"><div class="top"><span class="lab">${t.label}</span>
@@ -599,10 +570,6 @@ function renderJobCard(){
     `<div style="color:var(--mut);margin-top:6px">Report type <code>${esc(j.report_type||"")}</code>`+
     (j.job_id?` · job <code>${esc(j.job_id)}</code>`:``)+
     (j.reports!=null?` · ${j.reports} report files`:``)+`</div>`;
-  // import status
-  const n=Object.keys(STUDIO).length;
-  document.getElementById("impStatus").textContent = n
-    ? `${n} videos imported${STUDIO_META&&STUDIO_META.at?" · "+STUDIO_META.at:""}` : "no manual import loaded";
 }
 
 /* ============================ controls ============================ */
@@ -624,57 +591,21 @@ function syncInputs(){
   document.getElementById("rangelabel").innerHTML=`Showing <b>${RANGE.start}</b> → <b>${RANGE.end}</b> · ${between(RANGE.start,RANGE.end)} days${lab?` · ${lab}`:""}`;
 }
 
-/* ============================ CSV import ============================ */
-function parseCSV(text){
-  const rows=[]; let row=[],cur="",q=false;
-  for(let i=0;i<text.length;i++){ const c=text[i];
-    if(q){ if(c==='"'){ if(text[i+1]==='"'){cur+='"';i++;} else q=false; } else cur+=c; }
-    else { if(c==='"') q=true; else if(c===","){row.push(cur);cur="";}
-      else if(c==="\n"){row.push(cur);rows.push(row);row=[];cur="";}
-      else if(c==="\r"){} else cur+=c; } }
-  if(cur.length||row.length){ row.push(cur); rows.push(row); }
-  return rows.filter(r=>r.length>1||(r.length===1&&r[0].trim()));
-}
-function importStudio(text){
-  const rows=parseCSV(text); if(!rows.length) return {ok:false,msg:"empty file"};
-  const header=rows[0].map(h=>h.trim()); const low=header.map(h=>h.toLowerCase());
-  const findCol=(pred)=>low.findIndex(pred);
-  let vi=low.findIndex(h=>h==="video"||h==="content"||h==="video id");
-  if(vi<0) vi=low.findIndex(h=>h.includes("video")&&!h.includes("title")&&!h.includes("publish")&&!h.includes("duration"));
-  let ii=findCol(h=>h.includes("impression")&&!h.includes("click")&&!h.includes("ctr"));
-  let ci=findCol(h=>h.includes("click-through")||h.includes("click through")||h.includes("ctr"));
-  if(vi<0||ii<0) return {ok:false,msg:"couldn't find Video/Impressions columns. Header: "+header.join(" | ")};
-  const map={}; let count=0;
-  for(let k=1;k<rows.length;k++){ const r=rows[k]; if(!r||r.length<=Math.max(vi,ii)) continue;
-    const vid=(r[vi]||"").trim(); if(!vid||/^total/i.test(vid)) continue;
-    const imp=parseFloat((r[ii]||"").replace(/[, ]/g,""));
-    let ctr=ci>=0?parseFloat((r[ci]||"").replace(/[%, ]/g,"")):null;
-    if(isNaN(imp)) continue;
-    map[vid]={imp:imp, ctr:(ctr==null||isNaN(ctr))?null:ctr}; count++; }
-  if(!count) return {ok:false,msg:"no data rows parsed"};
-  return {ok:true, map, count, cols:{video:header[vi],imp:header[ii],ctr:ci>=0?header[ci]:null}};
-}
-function wireImport(){
-  document.getElementById("csv").onchange=ev=>{ const f=ev.target.files[0]; if(!f) return;
-    const rd=new FileReader(); rd.onload=()=>{ const res=importStudio(rd.result);
-      if(!res.ok){ alert("Import failed: "+res.msg); return; }
-      STUDIO=res.map; STUDIO_META={at:new Date().toISOString().slice(0,16).replace("T"," "),count:res.count,cols:res.cols};
-      try{ localStorage.setItem(LS_KEY,JSON.stringify({map:STUDIO,meta:STUDIO_META})); }catch(e){}
-      renderJobCard(); renderTopVideos();
-      alert(`Imported ${res.count} videos (Video=“${res.cols.video}”, Impressions=“${res.cols.imp}”, CTR=“${res.cols.ctr||"—"}”).`);
-    }; rd.readAsText(f); ev.target.value=""; };
-  document.getElementById("csvClear").onclick=()=>{ STUDIO={}; STUDIO_META=null;
-    try{ localStorage.removeItem(LS_KEY); }catch(e){} renderJobCard(); renderTopVideos(); };
-  document.getElementById("edOnly").checked = (STRATEGY.editorial_since? true:false);
-  document.getElementById("edOnly").onchange=renderTopVideos;
+/* ============================ toggles ============================ */
+function wireToggles(){
+  document.getElementById("edOnly").checked = (STRATEGY.editorial_since ? true : false);
+  document.getElementById("edOnly").onchange = renderTopVideos;
 }
 
 /* ============================ orchestration ============================ */
 function renderAll(){
   try{ localStorage.setItem("gcore_range_v1",JSON.stringify(RANGE)); }catch(e){}
-  syncInputs(); renderOverview(); renderDaily(); renderTopVideos(); renderDistributions(); renderTargets();
+  syncInputs(); renderOverview(); renderDaily(); renderDistributions(); renderTargets();
+  // top-videos table is lifetime/total per video → range-independent, rendered once at init
 }
-renderSnapshot(); renderStrategy(); renderJobCard(); renderControls(); wireImport(); renderAll();
+renderSnapshot(); renderStrategy(); renderJobCard(); renderControls(); wireToggles();
+renderTopVideos();   // lifetime totals — not affected by the date range
+renderAll();
 
 document.getElementById("foot").innerHTML =
   `Data: YouTube Data API (lifetime snapshot + video metadata), Analytics API v2 (day-granular views, `+
