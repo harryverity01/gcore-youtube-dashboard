@@ -30,9 +30,10 @@ whatever range you pick **entirely client-side**.
     (`channel_reach_basic_a1`) — it checks for an existing reporting job and
     **creates one if missing**, then downloads & parses the daily CSVs.
   - Writes `docs/data.json`. Degrades gracefully — a failing call never breaks the build.
-- **`strategy.json`** — the editorial strategy shown on the page (mission,
-  targets, "what's working", "next up"). **Edit by hand**; the numbers come from
-  the API automatically. `editorial_since` sets the "Editorial only" cutoff.
+- **`strategy.json`** — now only `editorial_since` is used: the "Editorial only"
+  cutoff date that hides old brand/promo videos from the Top Videos list. (The
+  on-page strategy, progress-to-targets, and impressions-explainer sections were
+  removed to keep the dashboard clean for sharing.)
 - **`build.py`** — renders a single static `index.html`: a reactive client app
   (date-range state + aggregation + charts/tables), Chart.js from CDN, thumbnails
   from `i.ytimg.com`. No server, no database.

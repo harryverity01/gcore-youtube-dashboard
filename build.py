@@ -193,7 +193,6 @@ HTML = r"""<!DOCTYPE html>
       <div class="sub" id="handle"></div>
     </div>
     <div class="right">
-      <span class="pill" id="phase"></span><br>
       <span id="built"></span>
     </div>
   </div>
@@ -212,17 +211,6 @@ HTML = r"""<!DOCTYPE html>
   <h2 class="sec">Channel Snapshot <span class="hint">lifetime totals · not range-dependent</span></h2>
   <div class="cards" id="snapcards"></div>
 
-  <h2 class="sec" id="targetsHdr">Progress to Targets</h2>
-  <div id="targets"></div>
-
-  <h2 class="sec">Performance <span class="hint" id="ovhint"></span></h2>
-  <div class="cards" id="ovcards"></div>
-
-  <h2 class="sec">Daily Breakdown</h2>
-  <div class="chart full" style="margin-bottom:14px"><h3>Views · watch time · avg view duration</h3>
-    <p class="cap" id="dailycap"></p><div class="cv" style="height:280px"><canvas id="cDaily"></canvas></div></div>
-  <div class="tablewrap"><div class="tablescroll"><table id="dailyTable"></table></div></div>
-
   <h2 class="sec">Top Videos <span class="hint">filter by publish date · lifetime views, impressions &amp; CTR · sortable</span></h2>
   <div class="tablewrap">
     <div class="tabletools">
@@ -232,19 +220,13 @@ HTML = r"""<!DOCTYPE html>
     <div class="tablescroll"><table id="tvTable"></table></div>
   </div>
 
-  <h2 class="sec">Impressions &amp; CTR <span class="hint">auto-updated daily via the YouTube Reporting API — no action needed</span></h2>
-  <div class="imp">
-    <div>
-      <h3>How it works</h3>
-      <p>Per-video <b>impressions &amp; CTR</b> refresh daily from the YouTube Reporting API. They currently show your
-        one-time Studio export (tagged <span class="tag imp">studio</span>); live API data replaces it automatically
-        within ~24–48h of the job starting.</p>
-    </div>
-    <div>
-      <h3>Reach reporting job</h3>
-      <div class="jobcard" id="jobcard"></div>
-    </div>
-  </div>
+  <h2 class="sec">Performance <span class="hint" id="ovhint"></span></h2>
+  <div class="cards" id="ovcards"></div>
+
+  <h2 class="sec">Daily Breakdown</h2>
+  <div class="chart full" style="margin-bottom:14px"><h3>Views · watch time · avg view duration</h3>
+    <p class="cap" id="dailycap"></p><div class="cv" style="height:280px"><canvas id="cDaily"></canvas></div></div>
+  <div class="tablewrap"><div class="tablescroll"><table id="dailyTable"></table></div></div>
 
   <h2 class="sec">Audience &amp; Reach</h2>
   <div class="grid">
@@ -252,20 +234,6 @@ HTML = r"""<!DOCTYPE html>
     <div class="chart"><h3>Content type · views share</h3><p class="cap" id="capContent"></p><div class="cv"><canvas id="cContent"></canvas></div></div>
     <div class="chart"><h3>Top geographies (views)</h3><p class="cap" id="capGeo"></p><div class="cv"><canvas id="cGeo"></canvas></div></div>
     <div class="chart"><h3>Audience by age</h3><p class="cap" id="capAge"></p><div class="cv"><canvas id="cAge"></canvas></div></div>
-  </div>
-
-  <h2 class="sec">Strategy</h2>
-  <div class="two">
-    <div class="box">
-      <h3>What's working</h3>
-      <div class="formula" id="formula"></div>
-      <ul class="ins" id="insights"></ul>
-    </div>
-    <div class="box">
-      <h3 id="nextHdr">Next up</h3>
-      <ul class="next" id="next"></ul>
-      <p style="color:var(--mut);font-size:12px;margin-top:18px;line-height:1.5" id="mission"></p>
-    </div>
   </div>
 
   <div class="foot" id="foot"></div>
@@ -486,7 +454,6 @@ function renderSnapshot(){
   const s=DATA.snapshot||{};
   document.getElementById("avatar").src=s.avatar||"https://yt3.ggpht.com/ytc/default";
   document.getElementById("handle").textContent="@gcoreofficial · channel created "+(s.created||"").slice(0,4);
-  document.getElementById("phase").textContent=STRATEGY.phase||"";
   document.getElementById("built").textContent="Updated "+BUILT;
   const cards=[{k:"Subscribers",v:fmt(SUBS_EXACT>0?SUBS_EXACT:s.subs)},{k:"Total Views",v:fmt(s.total_views)},
     {k:"Videos",v:fmt(s.videos)},{k:"Channel age",v:(s.created?Math.floor((Date.now()-Date.parse(s.created))/3.15e10):"—")+" yrs"}];
@@ -671,9 +638,9 @@ function wireToggles(){
 /* ============================ orchestration ============================ */
 function renderAll(){
   try{ localStorage.setItem("gcore_range_v1",JSON.stringify(RANGE)); }catch(e){}
-  syncInputs(); renderOverview(); renderDaily(); renderTopVideos(); renderDistributions(); renderTargets();
+  syncInputs(); renderOverview(); renderDaily(); renderTopVideos(); renderDistributions();
 }
-renderSnapshot(); renderStrategy(); renderJobCard(); renderControls(); wireToggles(); renderAll();
+renderSnapshot(); renderControls(); wireToggles(); renderAll();
 
 document.getElementById("foot").innerHTML =
   `Data: YouTube Data API (lifetime snapshot + video metadata), Analytics API v2 (day-granular views, `+
